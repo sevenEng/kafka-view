@@ -59,6 +59,18 @@ fn reassignment_table(cluster_id: &ClusterId) -> PreEscaped<String> {
     )
 }
 
+fn broker_replica_table(cluster_id: &ClusterId, broker_id: BrokerId, is_leader: bool) -> PreEscaped<String> {
+    let replica_mode = if is_leader { "leader" } else { "follower" };
+    let table_id = format!("broker-replica-{}-ajax", replica_mode);
+    let api_url = format!("/api/clusters/{}/brokers/{}/replicas/{}", cluster_id, broker_id, replica_mode);
+    layout::datatable_ajax(
+        &table_id,
+        &api_url,
+        cluster_id.name(),
+        html! { tr { th { "Topic" } th { "Partition" } th {"Size"} } },
+    )
+}
+
 #[get("/clusters/<cluster_id>")]
 pub fn cluster_page(cluster_id: ClusterId, cache: State<Cache>, config: State<Config>) -> Markup {
     if cache.brokers.get(&cluster_id).is_none() {
@@ -122,15 +134,21 @@ pub fn broker_page(
         .get(&(cluster_id.to_owned(), "__TOTAL__".to_owned()))
         .unwrap_or_default()
         .aggregate_broker_metrics();
+
+    let cluster_link = format!("/clusters/{}/", cluster_id.name());
     let content = html! {
-        h3 style="margin-top: 0px" { "Information" }
+        h3 style="margin-top: 0px" { "General Information" }
         dl class="dl-horizontal" {
-            dt { "Cluster name: " } dd { (cluster_id.name()) }
+            dt { "Cluster name " dd { a href=(cluster_link) { (cluster_id) } } }
             dt { "Bootstrap list: " } dd { (cluster_config.unwrap().broker_list.join(", ")) }
             dt { "Zookeeper: " } dd { (cluster_config.unwrap().zookeeper) }
             dt { "Hostname" } dd { (broker.hostname) }
             dt { "Traffic" } dd { (format!("{:.1} KB/s  {:.0} msg/s", metrics.b_rate_15 / 1000f64, metrics.m_rate_15)) }
         }
+        h3 { "Topic partition leader replicas" }
+        (broker_replica_table(&cluster_id, broker_id, true))
+        h3 { "Topic partition follower replicas" }
+        (broker_replica_table(&cluster_id, broker_id, false))
     };
-    layout::page(&format!("Broker: {}", cluster_id), content)
+    layout::page(&format!("Broker: {} {}", broker_id, cluster_id), content)
 }

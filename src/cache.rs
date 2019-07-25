@@ -20,7 +20,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 use error::*;
-use metadata::{Broker, ClusterId, Group, Partition, TopicName};
+use metadata::{Broker, BrokerId, ClusterId, Group, Partition, TopicName};
 use metrics::TopicMetrics;
 
 #[derive(Serialize, Deserialize, Debug, Hash, Eq, PartialEq)]
@@ -539,6 +539,9 @@ pub type BrokerCache = ReplicatedMap<ClusterId, Vec<Broker>>;
 /// Topic and partition information
 pub type TopicCache = ReplicatedMap<(ClusterId, TopicName), Vec<Partition>>;
 
+/// Replica assignment information
+pub type ReplicaAssignmentCache = ReplicatedMap<(ClusterId, BrokerId), Vec<(TopicName, i32, BrokerId)>>;
+
 /// Groups
 pub type GroupCache = ReplicatedMap<(ClusterId, String), Group>;
 
@@ -553,6 +556,7 @@ pub struct Cache {
     pub offsets: OffsetsCache,
     pub brokers: BrokerCache,
     pub topics: TopicCache,
+    pub replicas: ReplicaAssignmentCache,
     pub groups: GroupCache,
     pub internal_offsets: InternalConsumerOffsetCache,
 }
@@ -565,6 +569,7 @@ impl Cache {
             offsets: ReplicatedMap::new("offsets", replica_writer_arc.clone()),
             brokers: ReplicatedMap::new("brokers", replica_writer_arc.clone()),
             topics: ReplicatedMap::new("topics", replica_writer_arc.clone()),
+            replicas: ReplicatedMap::new("replicas", replica_writer_arc.clone()),
             groups: ReplicatedMap::new("groups", replica_writer_arc.clone()),
             internal_offsets: ReplicatedMap::new("internal_offsets", replica_writer_arc),
         }
@@ -576,6 +581,7 @@ impl Cache {
             offsets: self.offsets.alias(),
             brokers: self.brokers.alias(),
             topics: self.topics.alias(),
+            replicas: self.replicas.alias(),
             groups: self.groups.alias(),
             internal_offsets: self.internal_offsets.alias(),
         }
@@ -589,6 +595,7 @@ impl UpdateReceiver for Cache {
             "offsets" => self.offsets.receive_update(update),
             "brokers" => self.brokers.receive_update(update),
             "topics" => self.topics.receive_update(update),
+            "replicas" => self.replicas.receive_update(update),
             "groups" => self.groups.receive_update(update),
             "internal_offsets" => self.internal_offsets.receive_update(update),
             _ => bail!("Unknown cache name: {}", cache_name),

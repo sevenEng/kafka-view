@@ -310,6 +310,32 @@ impl MetadataFetchTaskGroup {
                 .chain_err(|| "Failed to insert broker information in cache")?;
         }
 
+        // Replicas
+        for topic in metadata.topics() {
+            for p in topic.partitions() {
+                let err_descr = p
+                    .error()
+                    .map(|e| rderror::RDKafkaError::from(e).description().to_owned());
+
+                if err_descr.is_none() {
+                    for replica in p.replicas() {
+                        let broker_replicas_key = (cluster_id.clone(), *replica);
+                        let mut broker_replicas = self.cache
+                            .replicas
+                            .get(&broker_replicas_key)
+                            .get_or_insert(Vec::new())
+                            .clone();
+
+                        broker_replicas.push((topic.name().to_owned(), p.id(), p.leader()));
+                        self.cache
+                            .replicas
+                            .insert(broker_replicas_key, broker_replicas)
+                            .chain_err(|| "Failed to insert replicas information in cache")?;
+                    }
+                }
+            }
+        }
+
         // Groups
         for group in fetch_groups(consumer.as_ref(), 30000)? {
             self.cache

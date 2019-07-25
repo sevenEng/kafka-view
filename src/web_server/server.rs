@@ -114,6 +114,7 @@ pub fn run_server(executor: &ThreadPoolExecutor, cache: Cache, config: &Config) 
                 pages::omnisearch::topic_search_p,
                 pages::topic::topic_page,
                 api::brokers,
+                api::broker_replicas,
                 api::cache_brokers,
                 api::cache_metrics,
                 api::cache_offsets,

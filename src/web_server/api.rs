@@ -10,7 +10,7 @@ use cache::Cache;
 use config::Config;
 use error::*;
 use live_consumer::LiveConsumerStore;
-use metadata::{ClusterId, TopicName, TopicPartition, CONSUMERS};
+use metadata::{BrokerId, ClusterId, TopicName, TopicPartition, CONSUMERS};
 use offsets::OffsetStore;
 use web_server::pages::omnisearch::OmnisearchFormParams;
 use zk::ZK;
@@ -98,6 +98,38 @@ pub fn brokers(cluster_id: ClusterId, cache: State<Cache>) -> String {
     }
 
     json!({ "data": result_data }).to_string()
+}
+
+#[get("/api/clusters/<cluster_id>/brokers/<broker_id>/replicas/<replica_mode>")]
+pub fn broker_replicas(cluster_id: ClusterId, broker_id: BrokerId, replica_mode: String, cache: State<Cache>) -> String {
+    let replicas = cache
+        .replicas
+        .get(&(cluster_id.clone(), broker_id))
+        .unwrap_or_default();
+
+    let mut result_data = Vec::with_capacity(replicas.len());
+    for (topic_name, partition_id, leader) in replicas {
+        let partition_metrics = cache
+            .metrics
+            .get(&(cluster_id.clone(), topic_name.to_string()))
+            .unwrap_or_default()
+            .brokers
+            .get(&leader)
+            .and_then(|broker_metrics| broker_metrics.partitions.get(partition_id as usize))
+            .cloned()
+            .unwrap_or_default();
+
+        if ("leader" == replica_mode && broker_id == leader) || ("follower" == replica_mode && broker_id != leader) {
+            result_data.push(json!((
+                topic_name,
+                partition_id,
+                partition_metrics.size_bytes,
+                leader
+            )));
+        }
+    }
+
+    json!({"data": result_data}).to_string()
 }
 
 //
